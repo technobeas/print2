@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Collection Tracker</title>
+    <style>
+      :root {
+        --bg: #f8f9fa;
+        --text: #212529;
+        --primary: #0d6efd;
+        --border: #dee2e6;
+        --card-bg: #ffffff;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem;
+      }
+
+      h1 {
+        margin-bottom: 1rem;
+        font-size: 1.8rem;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 500px;
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+      }
+
+      input[type="number"],
+      input[type="date"] {
+        width: 100%;
+        padding: 0.7rem;
+        margin-bottom: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 1rem;
+      }
+
+      .buttons {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .btn {
+        flex: 1;
+        padding: 0.7rem;
+        border: none;
+        border-radius: 6px;
+        font-size: 1rem;
+        cursor: pointer;
+        color: white;
+      }
+
+      .cash {
+        background: #198754;
+      }
+      .online {
+        background: #0d6efd;
+      }
+
+      .summary,
+      .history {
+        margin-top: 2rem;
+      }
+
+      .summary p {
+        font-size: 1rem;
+        margin: 0.3rem 0;
+      }
+
+      .history-entry {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.7rem;
+        margin-bottom: 0.7rem;
+        background: #ffffff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .entry-details {
+        flex-grow: 1;
+      }
+
+      .entry-actions button {
+        margin-left: 0.5rem;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: #dc3545;
+      }
+
+      .entry-actions button.edit {
+        color: #0d6efd;
+      }
+
+      .filters {
+        margin-top: 1rem;
+      }
+
+      button.export {
+        background: #6c757d;
+        margin-top: 1rem;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Daily Collection Tracker</h1>
+    <div class="container">
+      <input type="number" id="amount" placeholder="Enter amount (₹)" />
+
+      <div class="buttons">
+        <button class="btn cash" onclick="addEntry('Cash')">Add Cash</button>
+        <button class="btn online" onclick="addEntry('Online')">
+          Add Online
+        </button>
+      </div>
+
+      <div class="filters">
+        <label for="filterDate">Filter by Date:</label>
+        <input type="date" id="filterDate" onchange="renderHistory()" />
+      </div>
+
+      <div class="summary" id="summary"></div>
+
+      <div class="history">
+        <h3>History</h3>
+        <div id="historyList"></div>
+      </div>
+
+      <button class="btn export" onclick="exportData()">Export as CSV</button>
+    </div>
+
+    <script>
+      const DB_NAME = "DailyCollectionDB";
+      const DB_VERSION = 1;
+      let db;
+
+      window.onload = () => {
+        openDB();
+      };
+
+      function openDB() {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = (e) => alert("Database error");
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          renderHistory();
+        };
+        request.onupgradeneeded = (e) => {
+          db = e.target.result;
+          if (!db.objectStoreNames.contains("entries")) {
+            db.createObjectStore("entries", {
+              keyPath: "id",
+              autoIncrement: true,
+            });
+          }
+        };
+      }
+
+      function addEntry(type) {
+        const amount = parseFloat(document.getElementById("amount").value);
+        if (isNaN(amount) || amount <= 0) return alert("Enter a valid amount");
+
+        const entry = {
+          amount,
+          type,
+          date: new Date().toISOString(),
+        };
+
+        const tx = db.transaction(["entries"], "readwrite");
+        const store = tx.objectStore("entries");
+        store.add(entry);
+        tx.oncomplete = () => {
+          document.getElementById("amount").value = "";
+          renderHistory();
+        };
+      }
+
+      // function renderHistory() {
+      //   const dateFilter = document.getElementById("filterDate").value;
+      //   const tx = db.transaction(["entries"], "readonly");
+      //   const store = tx.objectStore("entries");
+      //   const request = store.getAll();
+      //   request.onsuccess = () => {
+      //     const data = request.result;
+      //     const today = new Date().toISOString().split("T")[0];
+
+      //     const filtered = dateFilter
+      //       ? data.filter((e) => e.date.startsWith(dateFilter))
+      //       : data.filter((e) => e.date.startsWith(today));
+
+      //     const cash = filtered
+      //       .filter((e) => e.type === "Cash")
+      //       .reduce((sum, e) => sum + e.amount, 0);
+      //     const online = filtered
+      //       .filter((e) => e.type === "Online")
+      //       .reduce((sum, e) => sum + e.amount, 0);
+
+      //     document.getElementById("summary").innerHTML = `
+      //     <p><strong>Date:</strong> ${dateFilter || today}</p>
+      //     <p>Cash Total: ₹${cash.toFixed(2)}</p>
+      //     <p>Online Total: ₹${online.toFixed(2)}</p>
+      //     <p>Total: ₹${(cash + online).toFixed(2)}</p>
+      //   `;
+
+      //     const list = document.getElementById("historyList");
+      //     list.innerHTML = "";
+      //     filtered.forEach((entry) => {
+      //       const div = document.createElement("div");
+      //       div.className = "history-entry";
+      //       div.innerHTML = `
+      //       <div class="entry-details">
+      //         <div><strong>${entry.type}</strong> - ₹${entry.amount.toFixed(
+      //         2
+      //       )}</div>
+      //         <small>${new Date(entry.date).toLocaleString()}</small>
+      //       </div>
+      //       <div class="entry-actions">
+      //         <button class="edit" onclick="editEntry(${entry.id})">✏️</button>
+      //         <button onclick="deleteEntry(${entry.id})">🗑️</button>
+      //       </div>
+      //     `;
+      //       list.appendChild(div);
+      //     });
+      //   };
+      // }
+
+      function renderHistory() {
+        const dateFilter = document.getElementById("filterDate").value;
+        const tx = db.transaction(["entries"], "readonly");
+        const store = tx.objectStore("entries");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const data = request.result;
+          const today = new Date().toISOString().split("T")[0];
+          const filtered = dateFilter
+            ? data.filter((e) => e.date.startsWith(dateFilter))
+            : data.filter((e) => e.date.startsWith(today));
+
+          const cash = filtered
+            .filter((e) => e.type === "Cash")
+            .reduce((sum, e) => sum + e.amount, 0);
+          const online = filtered
+            .filter((e) => e.type === "Online")
+            .reduce((sum, e) => sum + e.amount, 0);
+          const total = cash + online;
+
+          document.getElementById("summary").innerHTML = `
+      <p><strong>Date:</strong> ${dateFilter || today}</p>
+      <p>Cash Total: ₹${cash.toFixed(2)}</p>
+      <p>Online Total: ₹${online.toFixed(2)}</p>
+      <p>Total: ₹${total.toFixed(2)}</p>
+    `;
+
+          // ✅ Send totals to GA
+          gtag("event", "daily_totals", {
+            event_category: "Summary",
+            date: dateFilter || today,
+            cash_total: cash,
+            online_total: online,
+            total_amount: total,
+          });
+
+          const list = document.getElementById("historyList");
+          list.innerHTML = "";
+          filtered.forEach((entry) => {
+            const div = document.createElement("div");
+            div.className = "history-entry";
+            div.innerHTML = `
+        <div class="entry-details">
+          <div><strong>${entry.type}</strong> - ₹${entry.amount.toFixed(
+              2
+            )}</div>
+          <small>${new Date(entry.date).toLocaleString()}</small>
+        </div>
+        <div class="entry-actions">
+          <button class="edit" onclick="editEntry(${entry.id})">✏️</button>
+          <button onclick="deleteEntry(${entry.id})">🗑️</button>
+        </div>
+      `;
+            list.appendChild(div);
+          });
+        };
+      }
+
+      function deleteEntry(id) {
+        const tx = db.transaction(["entries"], "readwrite");
+        const store = tx.objectStore("entries");
+        store.delete(id);
+        tx.oncomplete = renderHistory;
+      }
+
+      function editEntry(id) {
+        const newAmount = prompt("Enter new amount:");
+        const amount = parseFloat(newAmount);
+        if (isNaN(amount) || amount <= 0) return alert("Invalid amount");
+
+        const tx = db.transaction(["entries"], "readwrite");
+        const store = tx.objectStore("entries");
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const entry = getReq.result;
+          entry.amount = amount;
+          store.put(entry);
+          tx.oncomplete = renderHistory;
+        };
+      }
+
+      function exportData() {
+        const tx = db.transaction(["entries"], "readonly");
+        const store = tx.objectStore("entries");
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const data = request.result;
+          let csv = "Date,Type,Amount\n";
+          data.forEach((entry) => {
+            const date = new Date(entry.date).toLocaleString();
+            csv += `"${date}",${entry.type},${entry.amount}\n`;
+          });
+
+          const blob = new Blob([csv], { type: "text/csv" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "daily_collection.csv";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        };
+      }
+    </script>
+  </body>
+</html>
