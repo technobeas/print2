@@ -255,8 +255,8 @@
       //   };
       // }
 
-      // 🧠 Remember last reported date to prevent duplicate GA events
-      let lastReportedDate = null;
+      // 🧠 Remember last totals sent to GA (per date)
+      let lastSentTotals = {}; // e.g. { "2025-11-13": 54652658 }
 
       // 🕓 Auto-set the date picker to today's date on load
       window.addEventListener("DOMContentLoaded", () => {
@@ -280,7 +280,7 @@
           // Determine which date to filter and show
           const selectedDate = dateFilter || today;
 
-          // Filter only entries matching the selected date (exact match or start)
+          // Filter only entries matching the selected date
           const filtered = data.filter((e) => {
             const entryDate = new Date(e.date).toISOString().split("T")[0];
             return entryDate === selectedDate;
@@ -305,13 +305,11 @@
       <p>Total: ₹${total.toFixed(2)}</p>
     `;
 
-          // ✅ Send totals to GA (once per date)
-          if (lastReportedDate !== selectedDate) {
+          // ✅ Send updated totals to GA only if value changed
+          const previous = lastSentTotals[selectedDate] || 0;
+          if (previous !== total) {
             console.log(
-              "📊 Sending GA event for:",
-              selectedDate,
-              "Total:",
-              total
+              `📊 GA event updated for ${selectedDate}: ₹${total.toFixed(2)}`
             );
             gtag("event", "daily_totals", {
               event_category: "Summary",
@@ -320,9 +318,9 @@
               online_total: online,
               total_amount: total,
             });
-            lastReportedDate = selectedDate;
+            lastSentTotals[selectedDate] = total;
           } else {
-            console.log("⏩ GA event skipped (already sent for this date).");
+            console.log(`⏩ GA event skipped (no change for ${selectedDate})`);
           }
 
           // 🧾 Render the entry history
