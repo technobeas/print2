@@ -255,6 +255,8 @@
       //   };
       // }
 
+      let lastReportedDate = null; // 🧠 Remember last reported date to GA
+
       function renderHistory() {
         const dateFilter = document.getElementById("filterDate").value;
         const tx = db.transaction(["entries"], "readonly");
@@ -264,36 +266,51 @@
         request.onsuccess = () => {
           const data = request.result;
           const today = new Date().toISOString().split("T")[0];
-          const filtered = dateFilter
-            ? data.filter((e) => e.date.startsWith(dateFilter))
-            : data.filter((e) => e.date.startsWith(today));
+          const selectedDate = dateFilter || today;
 
+          // Filter entries for the selected date
+          const filtered = data.filter((e) => e.date.startsWith(selectedDate));
+
+          // Calculate totals
           const cash = filtered
             .filter((e) => e.type === "Cash")
             .reduce((sum, e) => sum + e.amount, 0);
+
           const online = filtered
             .filter((e) => e.type === "Online")
             .reduce((sum, e) => sum + e.amount, 0);
+
           const total = cash + online;
 
+          // Update summary UI
           document.getElementById("summary").innerHTML = `
-      <p><strong>Date:</strong> ${dateFilter || today}</p>
+      <p><strong>Date:</strong> ${selectedDate}</p>
       <p>Cash Total: ₹${cash.toFixed(2)}</p>
       <p>Online Total: ₹${online.toFixed(2)}</p>
       <p>Total: ₹${total.toFixed(2)}</p>
     `;
 
-          // ✅ Send totals to GA
-          gtag("event", "daily_totals", {
-            event_category: "Summary",
-            date: dateFilter || today,
-            cash_total: cash,
-            online_total: online,
-            total_amount: total,
-          });
+          // ✅ Send totals to GA (only once per date)
+          if (lastReportedDate !== selectedDate) {
+            gtag("event", "daily_totals", {
+              event_category: "Summary",
+              date: selectedDate,
+              cash_total: cash,
+              online_total: online,
+              total_amount: total,
+            });
+            console.log(
+              `GA event sent for ${selectedDate}: ₹${total.toFixed(2)}`
+            );
+            lastReportedDate = selectedDate;
+          } else {
+            console.log(`GA event skipped for ${selectedDate} (already sent)`);
+          }
 
+          // Render history entries
           const list = document.getElementById("historyList");
           list.innerHTML = "";
+
           filtered.forEach((entry) => {
             const div = document.createElement("div");
             div.className = "history-entry";
@@ -314,6 +331,7 @@
         };
       }
 
+      // 🗑️ Delete entry and refresh
       function deleteEntry(id) {
         const tx = db.transaction(["entries"], "readwrite");
         const store = tx.objectStore("entries");
@@ -321,6 +339,7 @@
         tx.oncomplete = renderHistory;
       }
 
+      // ✏️ Edit entry and refresh
       function editEntry(id) {
         const newAmount = prompt("Enter new amount:");
         const amount = parseFloat(newAmount);
@@ -337,10 +356,12 @@
         };
       }
 
+      // 📤 Export all entries as CSV
       function exportData() {
         const tx = db.transaction(["entries"], "readonly");
         const store = tx.objectStore("entries");
         const request = store.getAll();
+
         request.onsuccess = () => {
           const data = request.result;
           let csv = "Date,Type,Amount\n";
