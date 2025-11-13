@@ -255,7 +255,17 @@
       //   };
       // }
 
-      let lastReportedDate = null; // 🧠 Remember last reported date to GA
+      // 🧠 Remember last reported date to prevent duplicate GA events
+      let lastReportedDate = null;
+
+      // 🕓 Auto-set the date picker to today's date on load
+      window.addEventListener("DOMContentLoaded", () => {
+        const today = new Date().toISOString().split("T")[0];
+        const filterInput = document.getElementById("filterDate");
+        if (filterInput && !filterInput.value) {
+          filterInput.value = today;
+        }
+      });
 
       function renderHistory() {
         const dateFilter = document.getElementById("filterDate").value;
@@ -266,10 +276,15 @@
         request.onsuccess = () => {
           const data = request.result;
           const today = new Date().toISOString().split("T")[0];
+
+          // Determine which date to filter and show
           const selectedDate = dateFilter || today;
 
-          // Filter entries for the selected date
-          const filtered = data.filter((e) => e.date.startsWith(selectedDate));
+          // Filter only entries matching the selected date (exact match or start)
+          const filtered = data.filter((e) => {
+            const entryDate = new Date(e.date).toISOString().split("T")[0];
+            return entryDate === selectedDate;
+          });
 
           // Calculate totals
           const cash = filtered
@@ -282,7 +297,7 @@
 
           const total = cash + online;
 
-          // Update summary UI
+          // Update summary in UI
           document.getElementById("summary").innerHTML = `
       <p><strong>Date:</strong> ${selectedDate}</p>
       <p>Cash Total: ₹${cash.toFixed(2)}</p>
@@ -290,8 +305,14 @@
       <p>Total: ₹${total.toFixed(2)}</p>
     `;
 
-          // ✅ Send totals to GA (only once per date)
+          // ✅ Send totals to GA (once per date)
           if (lastReportedDate !== selectedDate) {
+            console.log(
+              "📊 Sending GA event for:",
+              selectedDate,
+              "Total:",
+              total
+            );
             gtag("event", "daily_totals", {
               event_category: "Summary",
               date: selectedDate,
@@ -299,15 +320,12 @@
               online_total: online,
               total_amount: total,
             });
-            console.log(
-              `GA event sent for ${selectedDate}: ₹${total.toFixed(2)}`
-            );
             lastReportedDate = selectedDate;
           } else {
-            console.log(`GA event skipped for ${selectedDate} (already sent)`);
+            console.log("⏩ GA event skipped (already sent for this date).");
           }
 
-          // Render history entries
+          // 🧾 Render the entry history
           const list = document.getElementById("historyList");
           list.innerHTML = "";
 
@@ -331,7 +349,7 @@
         };
       }
 
-      // 🗑️ Delete entry and refresh
+      // 🗑️ Delete entry
       function deleteEntry(id) {
         const tx = db.transaction(["entries"], "readwrite");
         const store = tx.objectStore("entries");
@@ -339,7 +357,7 @@
         tx.oncomplete = renderHistory;
       }
 
-      // ✏️ Edit entry and refresh
+      // ✏️ Edit entry
       function editEntry(id) {
         const newAmount = prompt("Enter new amount:");
         const amount = parseFloat(newAmount);
@@ -356,7 +374,7 @@
         };
       }
 
-      // 📤 Export all entries as CSV
+      // 📤 Export all data as CSV
       function exportData() {
         const tx = db.transaction(["entries"], "readonly");
         const store = tx.objectStore("entries");
